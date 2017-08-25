@@ -362,7 +362,8 @@ class ImageManager(base.ManagerWithFind):
             hdrs['x-glance-api-copy-from'] = copy_from
 
         url = '/v1/images/%s' % base.getid(image)
-        resp, body = self.client.put(url, headers=hdrs, data=image_data)
+        resp, body = self.client.put(url, headers=hdrs,
+                                     data=utils.CooperativeReader(image_data))
         return_request_id = kwargs.get('return_req_id', None)
         if return_request_id is not None:
             return_request_id.append(resp.headers.get(OS_REQ_ID_HDR, None))

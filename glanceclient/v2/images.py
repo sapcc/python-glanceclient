@@ -214,7 +214,7 @@ class Controller(object):
         url = '/v2/images/%s/file' % image_id
         hdrs = {'Content-Type': 'application/octet-stream'}
         body = image_data
-        self.http_client.put(url, headers=hdrs, data=body)
+        self.http_client.put(url, headers=hdrs, data=utils.CooperativeReader(body))
 
     def delete(self, image_id):
         """Delete an image."""

@@ -41,6 +41,10 @@ class CommunicationError(BaseException):
 class ClientException(Exception):
     """DEPRECATED!"""
 
+class LimitExceeded(BaseException):
+    message = "The request returned a 413 Request Entity Too Large. This " \
+                + "generally means that rate limiting or a quota threshold was " \
+                + "breached."
 
 class HTTPException(ClientException):
     """Base exception for all HTTP-derived exceptions."""
