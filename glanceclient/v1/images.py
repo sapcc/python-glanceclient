@@ -303,6 +303,7 @@ class ImageManager(base.ManagerWithFind):
             image_size = utils.get_file_size(image_data)
             if image_size is not None:
                 kwargs.setdefault('size', image_size)
+            image_data = utils.CooperativeReader(image_data)
 
         fields = {}
         for field in kwargs:
@@ -321,7 +322,7 @@ class ImageManager(base.ManagerWithFind):
 
         resp, body = self.client.post('/v1/images',
                                       headers=hdrs,
-                                      data=utils.CooperativeReader(image_data))
+                                      data=image_data)
         return_request_id = kwargs.get('return_req_id', None)
         if return_request_id is not None:
             return_request_id.append(resp.headers.get(OS_REQ_ID_HDR, None))
@@ -338,6 +339,7 @@ class ImageManager(base.ManagerWithFind):
             image_size = utils.get_file_size(image_data)
             if image_size is not None:
                 kwargs.setdefault('size', image_size)
+            image_data = utils.CooperativeReader(image_data)
 
         hdrs = {}
         purge_props = 'false'
@@ -363,7 +365,7 @@ class ImageManager(base.ManagerWithFind):
 
         url = '/v1/images/%s' % base.getid(image)
         resp, body = self.client.put(url, headers=hdrs,
-                                     data=utils.CooperativeReader(image_data))
+                                     data=image_data)
         return_request_id = kwargs.get('return_req_id', None)
         if return_request_id is not None:
             return_request_id.append(resp.headers.get(OS_REQ_ID_HDR, None))
