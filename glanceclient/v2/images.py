@@ -232,7 +232,7 @@ class Controller(object):
             except warlock.InvalidOperation as e:
                 raise TypeError(encodeutils.exception_to_unicode(e))
 
-        resp, body = self.http_client.post(url, data=image)
+        resp, body = self.http_client.post(url, data=utils.CooperativeReader(image))
         # NOTE(esheffield): remove 'self' for now until we have an elegant
         # way to pass it into the model constructor without conflict
         body.pop('self', None)
