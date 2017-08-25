@@ -214,7 +214,7 @@ class Controller(object):
         url = '/v2/images/%s/file' % image_id
         hdrs = {'Content-Type': 'application/octet-stream'}
         body = image_data
-        self.http_client.put(url, headers=hdrs, data=body)
+        self.http_client.put(url, headers=hdrs, data=utils.CooperativeReader(body))
 
     def delete(self, image_id):
         """Delete an image."""
@@ -232,7 +232,7 @@ class Controller(object):
             except warlock.InvalidOperation as e:
                 raise TypeError(encodeutils.exception_to_unicode(e))
 
-        resp, body = self.http_client.post(url, data=image)
+        resp, body = self.http_client.post(url, data=utils.CooperativeReader(image))
         # NOTE(esheffield): remove 'self' for now until we have an elegant
         # way to pass it into the model constructor without conflict
         body.pop('self', None)

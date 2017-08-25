@@ -34,6 +34,8 @@ if os.name == 'nt':
 else:
     msvcrt = None
 
+import eventlet
+
 from oslo_utils import encodeutils
 from oslo_utils import strutils
 import prettytable
@@ -484,3 +486,120 @@ class IterableWithLength(object):
 
     def __len__(self):
         return self.length
+
+def cooperative_iter(iter):
+    """
+    Return an iterator which schedules after each
+    iteration. This can prevent eventlet thread starvation.
+
+    :param iter: an iterator to wrap
+    """
+    try:
+        for chunk in iter:
+            eventlet.sleep(0)
+            yield chunk
+    except Exception as err:
+        with excutils.save_and_reraise_exception():
+            msg = _LE("Error: cooperative_iter exception %s") % err
+            LOG.error(msg)
+
+
+def cooperative_read(fd):
+    """
+    Wrap a file descriptor's read with a partial function which schedules
+    after each read. This can prevent eventlet thread starvation.
+
+    :param fd: a file descriptor to wrap
+    """
+    def readfn(*args):
+        result = fd.read(*args)
+        eventlet.sleep(0)
+        return result
+    return readfn
+
+class CooperativeReader(object):
+    """
+    An eventlet thread friendly class for reading in image data.
+
+    When accessing data either through the iterator or the read method
+    we perform a sleep to allow a co-operative yield. When there is more than
+    one image being uploaded/downloaded this prevents eventlet thread
+    starvation, ie allows all threads to be scheduled periodically rather than
+    having the same thread be continuously active.
+    """
+    def __init__(self, fd):
+        """
+        :param fd: Underlying image file object
+        """
+        self.fd = fd
+        self.iterator = None
+        # NOTE(markwash): if the underlying supports read(), overwrite the
+        # default iterator-based implementation with cooperative_read which
+        # is more straightforward
+        if hasattr(fd, 'read'):
+            self.read = cooperative_read(fd)
+        else:
+            self.iterator = None
+            self.buffer = b''
+            self.position = 0
+
+    def read(self, length=None):
+        """Return the requested amount of bytes, fetching the next chunk of
+        the underlying iterator when needed.
+
+        This is replaced with cooperative_read in __init__ if the underlying
+        fd already supports read().
+        """
+        if length is None:
+            if len(self.buffer) - self.position > 0:
+                # if no length specified but some data exists in buffer,
+                # return that data and clear the buffer
+                result = self.buffer[self.position:]
+                self.buffer = b''
+                self.position = 0
+                return str(result)
+            else:
+                # otherwise read the next chunk from the underlying iterator
+                # and return it as a whole. Reset the buffer, as subsequent
+                # calls may specify the length
+                try:
+                    if self.iterator is None:
+                        self.iterator = self.__iter__()
+                    return next(self.iterator)
+                except StopIteration:
+                    return ''
+                finally:
+                    self.buffer = b''
+                    self.position = 0
+        else:
+            result = bytearray()
+            while len(result) < length:
+                if self.position < len(self.buffer):
+                    to_read = length - len(result)
+                    chunk = self.buffer[self.position:self.position + to_read]
+                    result.extend(chunk)
+
+                    # This check is here to prevent potential OOM issues if
+                    # this code is called with unreasonably high values of read
+                    # size. Currently it is only called from the HTTP clients
+                    # of Glance backend stores, which use httplib for data
+                    # streaming, which has readsize hardcoded to 8K, so this
+                    # check should never fire. Regardless it still worths to
+                    # make the check, as the code may be reused somewhere else.
+                    if len(result) >= MAX_COOP_READER_BUFFER_SIZE:
+                        raise exc.LimitExceeded()
+                    self.position += len(chunk)
+                else:
+                    try:
+                        if self.iterator is None:
+                            self.iterator = self.__iter__()
+                        self.buffer = next(self.iterator)
+                        self.position = 0
+                    except StopIteration:
+                        self.buffer = b''
+                        self.position = 0
+                        return bytes(result)
+            return bytes(result)
+
+    def __iter__(self):
+        return cooperative_iter(self.fd.__iter__())
